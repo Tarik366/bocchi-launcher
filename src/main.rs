@@ -1,22 +1,48 @@
-use std::fs::File;
-use std::io::BufReader;
-use std::io::prelude::*;
-use serde_json;
+use directories::UserDirs;
+
+use crate::utilities::file::get_hex;
+
+mod utilities;
+mod ppsspp;
+
+#[macro_use]
+extern crate fstrings;
+
+struct Paths {
+    ppsspp: String,
+    dolphin: String,
+    steam: String,
+    epic: String,
+    gog: String,
+}
+
+fn get_games(path:Option<&str>) -> std::io::Result<()> {
+    let path = path.unwrap_or("/");
+    let balık: Paths;
+    if let Some(user_dirs) = UserDirs::new() {
+        balık = Paths {
+            ppsspp: f!("{}\\PPSSPP\\PSP", user_dirs.document_dir().unwrap().to_str().unwrap()),
+            dolphin: f!("C:\\Users\\Tarık\\Documents\\Dolphin Emulator\\Games"),
+            steam: f!("C:\\Program Files (x86)\\Steam\\steamapps\\common"),
+            epic: f!("C:\\Program Files\\Epic Games"),
+            gog: f!("C:\\Program Files (x86)\\GOG Galaxy\\Games"),
+        };
+
+        println!("PPSSPP Games: {}", balık.ppsspp);
+    }
+    // PPSSPP games
+    // C:\Users\Tarık\Documents\PPSSPP\PSP\GAME
+    
+    Ok(())
+}
 
 fn main() -> std::io::Result<()> {
-    let file = File::open("game.json")?;
-    let mut buf_reader = BufReader::new(file);
-    let mut contents = String::new();
-    buf_reader.read_to_string(&mut contents)?;
-    let parsed = serde_json::from_str::<serde_json::Value>(&contents)?;
-    for (key, value) in parsed["platform"].as_object().unwrap() {
-        println!("{}", key);
-        for (key, value) in value.as_object().unwrap() {
-            println!("  {}", key.as_str());
-            println!("  {}", value["app_id"]);
-            println!("  ---");
-        }
-        println!("---");
+    let psp_game_paths = &ppsspp::get_shared_games("C:\\Users\\Tarık\\Documents\\PPSSPP\\PSP"); // dosya yolunu buraya yaz
+    for game_path in psp_game_paths {
+        let game = ppsspp::get_game(game_path)?;
+        println!("Game ID: {}, Title: {}, Version: {}, Path: {}, Icon: {:?}, Thumbnail: {:?}, Params: {:?}", 
+            game.id, game.title, game.version, game.path, game.icon, game.thumbnail, game.params);
     }
     Ok(())
 }
+

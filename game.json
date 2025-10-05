@@ -1,0 +1,24 @@
+{
+    "platform": {
+        "steam": {
+            "Example Game" : {"app_id": 123456, "name": "Example Game"},
+            "Another Game" : {"app_id": 654321, "name": "Another Game"},
+            "Sample Game" : {"app_id": 111213, "name": "Sample Game"}
+        },
+        "epic": {
+            "Example Game" : {"app_id": "example-game-epic", "name": "Example Game"},
+            "Another Game" : {"app_id": "another-game-epic", "name": "Another Game"},
+            "Sample Game" : {"app_id": "sample-game-epic", "name": "Sample Game"}
+        },
+        "gog": {
+            "Example Game" : {"app_id": 789012, "name": "Example Game"},
+            "Another Game" : {"app_id": 210987, "name": "Another Game"},
+            "Sample Game" : {"app_id": 345678, "name": "Sample Game"}
+        },
+        "ppsspp": {
+            "Example Game" : {"app_id": "example-game-ppsspp", "name": "Example Game"},
+            "Another Game" : {"app_id": "another-game-ppsspp", "name": "Another Game"},
+            "Sample Game" : {"app_id": "sample-game-ppsspp", "name": "Sample Game"}
+        }
+    }
+}
