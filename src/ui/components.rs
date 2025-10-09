@@ -44,12 +44,12 @@ fn button_background(theme: &Theme, status: iced_button::Status) -> iced_button:
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Link {
-    Primary,
-    Secondary,
-}
-
-pub fn link(text: &str) -> iced::widget::Button<Message> {
-    iced_button(text).style(button_background)
-}
+// #[derive(Debug, Clone, Copy)]
+// enum Link {
+//     Primary,
+//     Secondary,
+// }
+// 
+// pub fn link(text: &str) -> iced::widget::Button<Message> {
+//     iced_button(text).style(button_background)
+// }

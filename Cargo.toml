@@ -3,13 +3,9 @@ name = "bocchi-launcher"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-debug = ["iced/hot"]
-
 [dependencies]
 directories = "6.0.0"
 fstrings = "0.2.3"
 iced = { git = "https://github.com/iced-rs/iced.git"}
 serde_json = "=1.0.1"
 rust-ini = "0.21.3"
-pyo3 = { version ="0.26.0",  features = ["auto-initialize"] }

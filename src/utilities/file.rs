@@ -3,12 +3,10 @@ use std::str;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::io::BufReader;
 use std::io::prelude::*;
-use pyo3::ffi::c_str;
 use serde_json;
 use ini::Ini;
-use pyo3::prelude::*;
-use pyo3::types::PyModule;
-use crate::utilities::file;
+use std::path::Path;
+
 
 pub fn read_file(path : &str ) -> Result<String, std::io::Error> {
     let file = fs::File::open(path).unwrap();
@@ -18,10 +16,10 @@ pub fn read_file(path : &str ) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
-pub fn read_json(path : &str ) -> Option<serde_json::Value> {
+pub fn read_json(path : &str ) -> serde_json::Value {
     let contents = read_file(path).unwrap();
-    let parsed = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
-    Some(parsed)
+    let parsed = serde_json::from_str::<serde_json::Value>(&contents).ok().unwrap();
+    parsed
 }
 
 // TODO: Need to test
@@ -105,35 +103,150 @@ pub fn get_hex(path: &str, offset: u64, end_byte: u8) -> io::Result<String> {
     Ok(str::from_utf8(&buffer).unwrap().to_string())
 }
 
-// Use iso.py from python for extracting files from ISO
-// path: ISO file path (absolute)
-// file_name: file to extract from ISO (with path inside ISO)
-// output: output path
-// Warning: This function not works with 
-pub fn write_iso_file(path: &str, file_name:&str, output:&str) -> PyResult<()> {
+mod custom_iso {
+    use super::*;
 
-    let mut pth = std::env::current_dir()?;
-    pth.push("src\\utilities\\iso.py");
+    const LOGICAL_BLOCK_SIZE: u64 = 2048;
+    const PVD_LBA: u64 = 16; // Primary Volume Descriptor'ın konumu
 
-    Python::attach(|py| {
-        let python_iso = PyModule::from_code(
-            py,
-            c_str!("def extract_file(iso_path, file_path, output_path):
-    import pycdlib
-    from io import BytesIO
-    from pathlib import Path
-    iso = pycdlib.PyCdlib()
-    iso.open(iso_path)
-    extracted = BytesIO()
-    iso.get_file_from_iso_fp(extracted, iso_path=file_path)
-    Path(output_path.rsplit(\"\\\\\", 1)[0]).mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'wb') as f:
-        f.write(extracted.getvalue())
-    iso.close()"),
-            c_str!("iso.py"),
-            c_str!("iso"),
-    )?.getattr("extract_file")?;
-    python_iso.call1((path, file_name, output))?;
+    /// ISO içindeki bir dosya veya dizini temsil eden yapı.
+    #[derive(Debug, Clone)]
+    pub struct DirectoryEntry {
+        pub lba: u64,
+        pub size: u32,
+        pub is_dir: bool,
+        pub identifier: String,
+    }
+
+    /// ISO dosya sistemini yöneten ana yapı.
+    pub struct IsoFs {
+        file: fs::File,
+        root_entry: DirectoryEntry,
+    }
+
+    impl IsoFs {
+        /// Yeni bir IsoFs nesnesi oluşturur. Primary Volume Descriptor'ı okur
+        /// ve kök dizini bulur.
+        pub fn new(mut file: fs::File) -> io::Result<Self> {
+            let mut buffer = vec![0u8; LOGICAL_BLOCK_SIZE as usize];
+
+            // PVD'yi oku
+            file.seek(SeekFrom::Start(PVD_LBA * LOGICAL_BLOCK_SIZE))?;
+            file.read_exact(&mut buffer)?;
+
+            // PVD'nin doğru olduğunu doğrula (Tip Kodu 1 olmalı)
+            if buffer[0] != 1 {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Primary Volume Descriptor bulunamadı"));
+            }
+
+            // Kök dizin kaydını PVD'den ayrıştır
+            let root_record_slice = &buffer[156..190];
+            let root_entry = parse_directory_entry(root_record_slice)?;
+
+            Ok(Self { file, root_entry })
+        }
+
+        /// Belirtilen yoldaki dosyayı veya dizini bulur.
+        pub fn open(&mut self, path: &str) -> io::Result<Option<DirectoryEntry>> {
+            let mut current_entry = self.root_entry.clone();
+            
+            // Yolu bileşenlerine ayır (örn: "/casper/vmlinuz" -> ["casper", "vmlinuz"])
+            for component in path.split('/').filter(|s| !s.is_empty()) {
+                if !current_entry.is_dir {
+                    return Ok(None); // Dosyanın içinde arama yapamayız
+                }
+                
+                // Mevcut dizinin içeriğini oku ve bileşeni ara
+                let entries = self.read_dir_contents(&current_entry)?;
+                match entries.iter().find(|e| e.identifier.trim_end_matches(';').trim_end_matches('.') == component) {
+                    Some(entry) => current_entry = entry.clone(),
+                    None => return Ok(None), // Bileşen bulunamadı
+                }
+            }
+
+            Ok(Some(current_entry))
+        }
+
+        /// Bir dizin girdisinin içeriğini okur ve alt girdileri döndürür.
+        fn read_dir_contents(&mut self, dir_entry: &DirectoryEntry) -> io::Result<Vec<DirectoryEntry>> {
+            let mut buffer = vec![0u8; dir_entry.size as usize];
+            self.file.seek(SeekFrom::Start(dir_entry.lba * LOGICAL_BLOCK_SIZE))?;
+            self.file.read_exact(&mut buffer)?;
+
+            let mut entries = Vec::new();
+            let mut offset = 0;
+            while offset < buffer.len() {
+                let record_len = buffer[offset] as usize;
+                if record_len == 0 {
+                    break; // Kayıtların sonu
+                }
+                let record_slice = &buffer[offset..offset + record_len];
+                
+                // '.' ve '..' girdilerini atla
+                if record_slice[32] > 1 {
+                    entries.push(parse_directory_entry(record_slice)?);
+                }
+
+                offset += record_len;
+            }
+
+            Ok(entries)
+        }
+        
+        /// Ayıklama için bir dosya okuyucusu oluşturur.
+        pub fn reader(&mut self, entry: &DirectoryEntry) -> io::Result<impl Read + '_> {
+            self.file.seek(SeekFrom::Start(entry.lba * LOGICAL_BLOCK_SIZE))?;
+            Ok(self.file.try_clone()?.take(entry.size as u64))
+        }
+    }
+
+    /// Bir byte diliminden DirectoryEntry'yi ayrıştırır.
+    fn parse_directory_entry(slice: &[u8]) -> io::Result<DirectoryEntry> {
+        let lba = u32::from_le_bytes(slice[2..6].try_into().unwrap()) as u64;
+        let size = u32::from_le_bytes(slice[10..14].try_into().unwrap());
+        let flags = slice[25];
+        let is_dir = (flags & 2) != 0;
+        let identifier_len = slice[32] as usize;
+        let identifier = str::from_utf8(&slice[33..33 + identifier_len])
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Geçersiz dosya adı"))?
+            .to_string();
+        
+        // Rock Ridge/Joliet uzantıları için temel bir düzeltme.
+        // Genellikle dosya adının sonunda ";1" olur.
+        let clean_identifier = identifier.split(';').next().unwrap_or("").to_string();
+
+        Ok(DirectoryEntry { lba, size, is_dir, identifier: clean_identifier })
+    }
+}
+
+/// Bir ISO dosyasından belirtilen bir dosyayı ayıklar ve hedef yola yazar.
+pub fn extract_file(
+    iso_path: &str,
+    file_path_in_iso: &str,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let iso_file = fs::File::open(iso_path)?;
+    let mut fs = custom_iso::IsoFs::new(iso_file)?;
+
+    // ISO içinde belirtilen dosyayı bul
+    let file_entry = fs
+        .open(file_path_in_iso)?
+        .ok_or_else(|| format!("'{}' dosyası ISO içinde bulunamadı.", file_path_in_iso))?;
+
+    if file_entry.is_dir {
+        return Err(format!("'{}' bir dosyadır, dizin değil.", file_path_in_iso).into());
+    }
+
+    // Hedef dizinin var olduğundan emin ol
+    let out_path = Path::new(output_path);
+    if let Some(parent_dir) = out_path.parent() {
+        fs::create_dir_all(parent_dir)?;
+    }
+    
+    // Dosyayı oku ve çıktı dosyasına yaz
+    let mut reader = fs.reader(&file_entry)?;
+    let mut output_file = fs::File::create(output_path)?;
+    io::copy(&mut reader, &mut output_file)?;
+
     Ok(())
-    })
 }

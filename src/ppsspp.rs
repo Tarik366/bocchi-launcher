@@ -1,7 +1,7 @@
 
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
-use std::path::{self, Path, PathBuf};
+use std::io::{Read};
+use std::path::{PathBuf};
 use crate::utilities;
 use crate::utilities::file::get_hex;
 
@@ -25,35 +25,6 @@ pub struct PPSSPPGame {
     pub icon: PathBuf,
     pub thumbnail: PathBuf,
     pub params: PathBuf,
-}
-
-pub fn get_game(path: &str) -> Result<PPSSPPGame, std::io::Error> {
-    let mut game = PPSSPPGame { 
-        id: String::from(""),
-        title: String::from(""),
-        version: String::from(""),
-        path: path.to_string(),
-        icon: PathBuf::from("temp\\PIC1.PNG"),
-        thumbnail: PathBuf::from("temp\\PIC1.PNG"),
-        params: PathBuf::from("temp\\PARAM.SFO"),
-    };
-
-    game.id = get_hex(path, 0x8373, 0x7C)?;
-    game.icon = PathBuf::from(format!("temp\\psp\\{}\\icon.png", game.id));
-    game.thumbnail = PathBuf::from(format!("temp\\psp\\{}\\thumb.png", game.id));
-    game.params = PathBuf::from(format!("temp\\psp\\{}\\params.sfo", game.id));
-
-    // get game icon
-    utilities::file::write_iso_file(path, "/PSP_GAME/ICON0.PNG", game.icon.to_str().unwrap())?;
-    // get game thumbnail
-    utilities::file::write_iso_file(path, "/PSP_GAME/PIC1.PNG", game.thumbnail.to_str().unwrap())?;
-    // get game info (i.e. title, id, version)
-    utilities::file::write_iso_file(path, "/PSP_GAME/PARAM.SFO", game.params.to_str().unwrap())?;
-
-    // read game info from PARAM.SFO
-    game.title = get_param_data(game.params.to_str().unwrap())?;
-
-    Ok(game)
 }
 
 // TODO: get version too
@@ -117,3 +88,34 @@ fn get_param_data(path: &str) -> Result<String, std::io::Error> {
 
     Ok(result_text)
 }
+
+pub fn get_game(path: &str) -> Result<PPSSPPGame, std::io::Error> {
+    let mut game = PPSSPPGame { 
+        id: String::from(""),
+        title: String::from(""),
+        version: String::from(""),
+        path: path.to_string(),
+        icon: PathBuf::from("temp\\PIC1.PNG"),
+        thumbnail: PathBuf::from("temp\\PIC1.PNG"),
+        params: PathBuf::from("temp\\PARAM.SFO"),
+    };
+
+    game.id = get_hex(path, 0x8373, 0x7C)?;
+    game.icon = PathBuf::from(format!("temp\\psp\\{}\\icon.png", game.id));
+    game.thumbnail = PathBuf::from(format!("temp\\psp\\{}\\thumb.png", game.id));
+    game.params = PathBuf::from(format!("temp\\psp\\{}\\params.sfo", game.id));
+
+    // get game icon
+    utilities::file::extract_file(path, "/PSP_GAME/ICON0.PNG", game.icon.to_str().unwrap()).unwrap();
+    // get game thumbnail
+    utilities::file::extract_file(path, "/PSP_GAME/PIC1.PNG", game.thumbnail.to_str().unwrap()).unwrap();
+    // get game info (i.e. title, id, version)
+    utilities::file::extract_file(path, "/PSP_GAME/PARAM.SFO", game.params.to_str().unwrap()).unwrap();
+
+    // read game info from PARAM.SFO
+    game.title = get_param_data(game.params.to_str().unwrap())?;
+    game.version = get_hex(game.params.to_str().unwrap(), 0x190, 0x00)?;
+
+    Ok(game)
+}
+

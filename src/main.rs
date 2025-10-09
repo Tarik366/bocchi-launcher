@@ -1,15 +1,9 @@
 use directories::UserDirs;
 
-use crate::utilities::file::get_hex;
-use iced::{
-    Element, Theme, border, color, widget, Length,
-    widget::{column, container, row, text, Column},
-};
-use iced::alignment::{Horizontal, Vertical};
+use crate::utilities::file::{self, read_json};
 mod utilities;
 mod ppsspp;
 mod ui;
-use ui::components::link;
 
 #[macro_use]
 extern crate fstrings;
@@ -43,28 +37,32 @@ fn get_games(path:Option<&str>) -> std::io::Result<()> {
     Ok(())
 }
 
-struct Counter {
-    value: i64,
-}
 
-
-fn _get_ppssspp_games() -> std::io::Result<()> {
+fn get_ppssspp_games() -> std::io::Result<()> {
     
-    let psp_game_paths = &ppsspp::get_shared_games("C:\\Users\\Tarık\\Documents\\PPSSPP\\PSP"); // dosya yolunu buraya yaz
-    for game_path in psp_game_paths {
+    let recent_psp_game_paths = &ppsspp::get_recent_games("C:\\Users\\Tarık\\Documents\\PPSSPP\\PSP"); // dosya yolunu buraya yaz
+    let mut psp_game_paths = recent_psp_game_paths.clone(); // recent ve shared oyunları birleştir
+    for game in &ppsspp::get_shared_games("C:\\Users\\Tarık\\Documents\\PPSSPP\\PSP") {
+        if !psp_game_paths.contains(game) {
+            psp_game_paths.push(game.clone());
+        }
+    }
+    for game_path in &psp_game_paths {
         let game = ppsspp::get_game(game_path)?;
         println!("Game ID: {}, Title: {}, Version: {}, Path: {}, Icon: {:?}, Thumbnail: {:?}, Params: {:?}", 
             game.id, game.title, game.version, game.path, game.icon, game.thumbnail, game.params);
     }
+
+    read_json("game.json");
+
+    // TODO: print games to json file
+
     Ok(())
 }
 
 fn main() -> iced::Result {
-
-    let mut counter = Counter { value: 0 };
-    let interface = counter.view();
-    iced::application(Counter::new, Counter::update, Counter::view)
-    .theme(iced::Theme::CatppuccinMacchiato)
-    .run()
+    get_ppssspp_games().unwrap();
+    
+    Ok(())
 }
 
