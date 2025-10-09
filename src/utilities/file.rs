@@ -1,7 +1,4 @@
-use std::ffi::CStr;
 use std::fs;
-use std::path;
-use std::path::absolute;
 use std::str;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::io::BufReader;

@@ -3,6 +3,9 @@ name = "bocchi-launcher"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+debug = ["iced/hot"]
+
 [dependencies]
 directories = "6.0.0"
 fstrings = "0.2.3"

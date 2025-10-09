@@ -1,12 +1,19 @@
 use directories::UserDirs;
 
 use crate::utilities::file::get_hex;
-
+use iced::{
+    Element, Theme, border, color, widget, Length,
+    widget::{column, container, row, text, Column},
+};
+use iced::alignment::{Horizontal, Vertical};
 mod utilities;
 mod ppsspp;
+mod ui;
+use ui::components::link;
 
 #[macro_use]
 extern crate fstrings;
+
 
 struct Paths {
     ppsspp: String,
@@ -36,7 +43,13 @@ fn get_games(path:Option<&str>) -> std::io::Result<()> {
     Ok(())
 }
 
-fn main() -> std::io::Result<()> {
+struct Counter {
+    value: i64,
+}
+
+
+fn _get_ppssspp_games() -> std::io::Result<()> {
+    
     let psp_game_paths = &ppsspp::get_shared_games("C:\\Users\\Tarık\\Documents\\PPSSPP\\PSP"); // dosya yolunu buraya yaz
     for game_path in psp_game_paths {
         let game = ppsspp::get_game(game_path)?;
@@ -44,5 +57,14 @@ fn main() -> std::io::Result<()> {
             game.id, game.title, game.version, game.path, game.icon, game.thumbnail, game.params);
     }
     Ok(())
+}
+
+fn main() -> iced::Result {
+
+    let mut counter = Counter { value: 0 };
+    let interface = counter.view();
+    iced::application(Counter::new, Counter::update, Counter::view)
+    .theme(iced::Theme::CatppuccinMacchiato)
+    .run()
 }
 
